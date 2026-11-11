@@ -1,24 +1,15 @@
 const { randomUUID } = require('node:crypto');
-const path = require('node:path');
 const DocumentServiceError = require('./documentServiceError');
+const { getSafeOriginalName, toPublicDocument } = require('./documents.mapper');
 
 const DEFAULT_OWNER = 'local-user';
 
-function getSafeOriginalName(originalName) {
-  const fileName = path.basename(String(originalName || '').replace(/\\/g, '/'))
-    .replace(/[\u0000-\u001f\u007f]/g, '')
-    .trim();
-  return fileName || 'document';
-}
-
-function toPublicDocument(document) {
-  return {
-    id: document.id,
-    originalName: document.originalName,
-    size: document.size,
-    uploadedAt: document.uploadedAt,
-    owner: document.owner,
-  };
+async function removeUploadedFile(repository, filename) {
+  try {
+    await repository.removeFile(filename);
+  } catch {
+    return;
+  }
 }
 
 class DocumentsService {
@@ -28,7 +19,7 @@ class DocumentsService {
 
   async create(file) {
     if (!file.size) {
-      await this.documentsRepository.removeFile(file.filename).catch(() => {});
+      await removeUploadedFile(this.documentsRepository, file.filename);
       throw new DocumentServiceError('FILE_REQUIRED', 400, 'O arquivo não pode estar vazio.');
     }
 
@@ -45,7 +36,7 @@ class DocumentsService {
       await this.documentsRepository.save(document);
       return toPublicDocument(document);
     } catch (error) {
-      await this.documentsRepository.removeFile(file.filename).catch(() => {});
+      await removeUploadedFile(this.documentsRepository, file.filename);
       throw new DocumentServiceError('UPLOAD_FAILED', 500, 'Não foi possível enviar o documento.');
     }
   }
